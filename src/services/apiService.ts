@@ -297,8 +297,19 @@ class ApiService {
   }
 
   async getChatMessages(roomId: string): Promise<ApiResponse<any[]>> {
-    try { const res = await this.api.get(`/chat/rooms/${roomId}/messages`); return res.data; }
-    catch (e: any) { return { success: false, message: 'Failed' }; }
+    try {
+      const res = await this.api.get(`/chat/rooms/${roomId}/messages`);
+      const body = res.data;
+      const inner = body?.data ?? body;
+      const list = Array.isArray(inner?.messages)
+        ? inner.messages
+        : Array.isArray(inner)
+          ? inner
+          : [];
+      return { success: true, data: list };
+    } catch (e: any) {
+      return { success: false, message: 'Failed' };
+    }
   }
 
   async createChatRoom(data: { customer_id: number; subject: string; message: string }): Promise<ApiResponse<any>> {
@@ -306,9 +317,21 @@ class ApiService {
     catch (e: any) { return { success: false, message: 'Failed' }; }
   }
 
-  async sendMessage(data: { chatRoomId: string; message: string; senderId: string; senderType: string }): Promise<ApiResponse> {
-    try { const res = await this.api.post('/chat/messages', data); return res.data; }
-    catch (e: any) { return { success: false, message: 'Failed' }; }
+  async sendMessage(data: {
+    chatRoomId: string;
+    message: string;
+    senderId: string;
+    senderType: string;
+  }): Promise<ApiResponse> {
+    try {
+      const res = await this.api.post('/chat/messages', {
+        room_id: Number(data.chatRoomId),
+        message: data.message,
+      });
+      return res.data;
+    } catch (e: any) {
+      return { success: false, message: 'Failed' };
+    }
   }
 
   getCurrentUser(): User | null {

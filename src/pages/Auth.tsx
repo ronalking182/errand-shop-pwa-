@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/index';
+import { PwaInstallPrompt } from '../components/PwaInstallPrompt';
 import { useTheme } from '../theme/ThemeProvider';
 import { apiService } from '../services/apiService';
 
@@ -36,6 +37,8 @@ export function SignupPage() {
         </button>
         <h2 style={{ fontFamily: 'Sora,sans-serif', fontWeight: 800, fontSize: 20, color: colors.text }}>Create Account</h2>
       </div>
+
+      <PwaInstallPrompt spacing="0 16px" />
 
       <form onSubmit={onSubmit} style={{ padding: '0 16px' }}>
         {err && <div style={{ background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 16, color: '#DC2626', fontSize: 14 }}>{err}</div>}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/index';
+import { PwaInstallPrompt } from '../components/PwaInstallPrompt';
 import { useTheme } from '../theme/ThemeProvider';
 
 export default function LoginPage() {
@@ -34,6 +35,8 @@ export default function LoginPage() {
         <img src="/assets/images/logo.png" alt="Errand Shop" style={{ height: 40, objectFit: 'contain' }} />
         <p style={{ color: colors.sub, marginTop: 6, fontSize: 14 }}>Your shopping companion</p>
       </div>
+
+      <PwaInstallPrompt spacing="0 16px" />
 
       {/* Card */}
       <form onSubmit={onSubmit} style={{ margin: '0 16px', background: colors.card, borderRadius: 20, padding: '24px 20px', border: `1px solid ${colors.border}`, boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>

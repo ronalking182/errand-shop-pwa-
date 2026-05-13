@@ -4,10 +4,11 @@ import { useAuthStore } from '../store/index';
 import { useTheme } from '../theme/ThemeProvider';
 import { apiService } from '../services/apiService';
 import TabBar from '../components/TabBar';
+import { PwaInstallPrompt } from '../components/PwaInstallPrompt';
 
 // ─── PROFILE ────────────────────────────────────────────────────────────────────
 export function ProfilePage() {
-  const { colors, mode, setMode } = useTheme();
+  const { colors, mode, cycleMode } = useTheme();
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(null);
@@ -32,10 +33,17 @@ export function ProfilePage() {
       <div className="screen-content page-enter" style={{ background: colors.bg }}>
         <div className="header" style={{ background: colors.card, borderColor: colors.border }}>
           <span className="header-title" style={{ color: colors.text }}>Profile</span>
-          <button onClick={() => setMode(mode === 'dark' ? 'light' : 'dark')} style={{ background: colors.muted, border: 'none', borderRadius: 10, padding: '6px 10px', cursor: 'pointer', fontSize: 18 }}>
-            {mode === 'dark' ? '☀️' : '🌙'}
+          <button
+            type="button"
+            title={mode === 'light' ? 'Light · tap for dark' : mode === 'dark' ? 'Dark · tap to match device' : 'Matching device · tap for light'}
+            onClick={() => cycleMode()}
+            style={{ background: colors.muted, border: 'none', borderRadius: 10, padding: '6px 10px', cursor: 'pointer', fontSize: 18 }}
+          >
+            {mode === 'light' ? '☀️' : mode === 'dark' ? '🌙' : '📱'}
           </button>
         </div>
+
+        <PwaInstallPrompt spacing="16px 16px 0" />
 
         {/* Avatar + name */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 16px 20px', background: colors.card, borderBottom: `1px solid ${colors.border}` }}>
