@@ -1,11 +1,36 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useCartStore, useAuthStore, useOrdersStore } from '../store/index';
 import { useTheme } from '../theme/ThemeProvider';
 import { apiService, Product } from '../services/apiService';
 import TabBar from '../components/TabBar';
 
+declare global {
+  interface Window {
+    PaystackPop: {
+      setup(opts: {
+        key: string; email: string; amount: number; currency: string; ref: string;
+        metadata?: object; onClose: () => void;
+        callback: (r: { reference: string; status: string }) => void;
+      }): { openIframe(): void };
+    };
+  }
+}
+
+const PAYSTACK_KEY = (import.meta as any).env?.VITE_PAYSTACK_PUBLIC_KEY || '';
+
 function money(v: number) { return `₦${(v || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`; }
+
+function ImgWithFallback({ src, alt, style, className }: { src?: string; alt: string; style?: React.CSSProperties; className?: string }) {
+  const { colors } = useTheme();
+  const [err, setErr] = useState(false);
+  if (!src || err) return (
+    <div style={{ ...style, display: 'flex', alignItems: 'center', justifyContent: 'center', background: colors.muted }} className={className}>
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={colors.border} strokeWidth="1.5"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2 2H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+    </div>
+  );
+  return <img src={src} alt={alt} style={style} className={className} onError={() => setErr(true)} />;
+}
 
 // ─── PRODUCT DETAILS ───────────────────────────────────────────────────────────
 export function ProductDetailsPage() {
@@ -34,8 +59,11 @@ export function ProductDetailsPage() {
 
   const addToCart = () => {
     if (!product) return;
-    for (let i = 0; i < qty; i++) addItem({ id: product.id, name: product.name, price: product.price, image: product.image });
-    setToast('Added to cart!');
+    const maxQty = product.stockCount || 999;
+    const effectiveQty = Math.min(qty, maxQty - cartQty);
+    if (effectiveQty <= 0) { setToast('No more stock available'); setTimeout(() => setToast(''), 2000); return; }
+    for (let i = 0; i < effectiveQty; i++) addItem({ id: product.id, name: product.name, price: product.price, image: product.image });
+    setToast(`Added ${effectiveQty} to cart!`);
     setTimeout(() => setToast(''), 2000);
   };
 
@@ -43,7 +71,6 @@ export function ProductDetailsPage() {
   if (!product) return <div className="empty-state"><h3 style={{ color: colors.text }}>Product not found</h3><button className="btn btn-primary" onClick={() => navigate('/products')}>Browse Products</button></div>;
 
   const isOut = !product.inStock || (product.stockCount || 0) === 0;
-  const stockPct = Math.min(100, ((product.stockCount || 0) / 50) * 100);
 
   return (
     <div className="screen-content no-tab page-enter" style={{ background: colors.bg }}>
@@ -57,11 +84,7 @@ export function ProductDetailsPage() {
       </div>
 
       <div style={{ width: '100%', aspectRatio: '1', background: colors.muted, overflow: 'hidden', maxHeight: 280 }}>
-        {product.image ? <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke={colors.border} strokeWidth="1"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2 2H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-          </div>
-        )}
+        <ImgWithFallback src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       </div>
 
       <div style={{ padding: '20px 16px', background: colors.card, marginBottom: 8 }}>
@@ -103,7 +126,7 @@ export function ProductDetailsPage() {
           <div className="qty-control">
             <button className="qty-btn" onClick={() => setQty(q => Math.max(1, q - 1))} style={{ background: colors.muted, borderColor: colors.border }}>−</button>
             <span style={{ fontFamily: 'Sora,sans-serif', fontWeight: 800, fontSize: 18, color: colors.text, minWidth: 32, textAlign: 'center' }}>{qty}</span>
-            <button className="qty-btn" onClick={() => setQty(q => q + 1)} style={{ background: colors.muted, borderColor: colors.border }}>+</button>
+            <button className="qty-btn" onClick={() => setQty(q => Math.min(q + 1, product.stockCount || 99))} style={{ background: colors.muted, borderColor: colors.border }}>+</button>
             <span style={{ color: colors.sub, fontSize: 13, marginLeft: 8 }}>{product.stockCount ? `${product.stockCount} available` : ''}</span>
           </div>
         </div>
@@ -143,7 +166,11 @@ export function CartPage() {
     if (res.success && res.data?.valid) {
       useCartStore.getState().applyCoupon(couponCode.trim(), res.data.discountAmount);
       setCouponCode('');
-    } else setCouponError(res.data?.message || res.message || 'Invalid coupon');
+    } else setCouponError(res.data?.message || res.message || 'Invalid coupon code');
+  };
+
+  const confirmClear = () => {
+    if (window.confirm('Clear all items from your cart?')) clearCart();
   };
 
   return (
@@ -151,7 +178,7 @@ export function CartPage() {
       <div className="screen-content page-enter" style={{ background: colors.bg }}>
         <div className="header" style={{ background: colors.card, borderColor: colors.border }}>
           <span className="header-title" style={{ color: colors.text }}>My Cart</span>
-          {items.length > 0 && <button onClick={clearCart} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', fontWeight: 700, fontSize: 13 }}>Clear All</button>}
+          {items.length > 0 && <button onClick={confirmClear} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', fontWeight: 700, fontSize: 13 }}>Clear All</button>}
         </div>
 
         {items.length === 0 ? (
@@ -165,7 +192,7 @@ export function CartPage() {
           <>
             {items.map(item => (
               <div key={item.id} className="cart-item" style={{ borderColor: colors.border }}>
-                {item.image ? <img src={item.image} alt={item.name} className="cart-item-img" /> : <div className="cart-item-img" style={{ background: colors.muted, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={colors.sub} strokeWidth="1.5"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4"/></svg></div>}
+                <ImgWithFallback src={item.image} alt={item.name} className="cart-item-img" style={{ objectFit: 'cover' }} />
                 <div className="cart-item-info">
                   <div style={{ fontWeight: 700, fontSize: 14, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
                   <div style={{ color: colors.brand, fontFamily: 'Sora,sans-serif', fontWeight: 800, fontSize: 15, marginTop: 4 }}>{money(item.price)}</div>
@@ -182,7 +209,7 @@ export function CartPage() {
 
             <div style={{ padding: '16px', background: colors.card, margin: '12px 16px', borderRadius: 16, border: `1px solid ${colors.border}` }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <input className="input" placeholder="Coupon code" value={couponCode} onChange={e => setCouponCode(e.target.value)} style={{ background: colors.muted, borderColor: colors.border, color: colors.text, flex: 1 }} />
+                <input className="input" placeholder="Coupon code" value={couponCode} onChange={e => setCouponCode(e.target.value.toUpperCase())} maxLength={30} style={{ background: colors.muted, borderColor: colors.border, color: colors.text, flex: 1 }} />
                 <button className="btn btn-primary" style={{ padding: '12px 16px', fontSize: 14 }} onClick={applyCoupon} disabled={couponLoading}>
                   {couponLoading ? '...' : 'Apply'}
                 </button>
@@ -229,7 +256,7 @@ export function CheckoutPage() {
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedAddr, setSelectedAddr] = useState<any>(null);
   const [deliveryMode, setDeliveryMode] = useState<'home' | 'pickup'>('home');
-  const [payMethod, setPayMethod] = useState('cash_on_delivery');
+  const [payMethod, setPayMethod] = useState<'cash_on_delivery' | 'paystack'>('cash_on_delivery');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -237,7 +264,7 @@ export function CheckoutPage() {
     apiService.getCustomerAddresses().then(res => {
       if (res.success && res.data) {
         setAddresses(res.data);
-        const def = res.data.find(a => a.is_default) || res.data[0];
+        const def = res.data.find((a: any) => a.is_default) || res.data[0];
         if (def) setSelectedAddr(def);
       }
     });
@@ -245,9 +272,7 @@ export function CheckoutPage() {
 
   const grandTotal = getGrandTotal();
 
-  const placeOrder = async () => {
-    if (deliveryMode === 'home' && !selectedAddr) { setError('Please select a delivery address'); return; }
-    setLoading(true); setError('');
+  const doCreateOrder = async (extraFields: object = {}) => {
     const orderItems = items.map(i => ({ product_id: i.id, quantity: i.quantity, price: i.price }));
     const res = await createOrder({
       items: orderItems,
@@ -255,12 +280,56 @@ export function CheckoutPage() {
       delivery_mode: deliveryMode,
       payment_method: payMethod,
       ...(appliedCouponCode && { couponCode: appliedCouponCode }),
+      ...extraFields,
     });
+    return res;
+  };
+
+  const placeOrder = async () => {
+    if (deliveryMode === 'home' && !selectedAddr) { setError('Please select a delivery address'); return; }
+    setError('');
+
+    if (payMethod === 'paystack') {
+      if (!PAYSTACK_KEY || !window.PaystackPop) {
+        setError('Online payment is not available right now. Please use Cash on Delivery.');
+        return;
+      }
+      if (!user?.email) { setError('Could not find your email. Please log out and back in.'); return; }
+      setLoading(true);
+      const ref = `errand_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const handler = window.PaystackPop.setup({
+        key: PAYSTACK_KEY,
+        email: user.email,
+        amount: Math.round(grandTotal * 100),
+        currency: 'NGN',
+        ref,
+        metadata: { items_count: items.length, delivery_mode: deliveryMode },
+        onClose: () => {
+          setLoading(false);
+          setError('Payment was cancelled. Your order has not been placed.');
+        },
+        callback: async (response) => {
+          const res = await doCreateOrder({ payment_reference: response.reference, payment_method: 'paystack' });
+          setLoading(false);
+          if (res.success) {
+            clearCart();
+            navigate('/order-confirmation', { state: { order: res.data } });
+          } else {
+            setError(`Payment received (ref: ${response.reference}) but order failed: ${res.message || 'Unknown error'}. Please contact support.`);
+          }
+        },
+      });
+      handler.openIframe();
+      return;
+    }
+
+    setLoading(true);
+    const res = await doCreateOrder();
     setLoading(false);
     if (res.success) {
       clearCart();
       navigate('/order-confirmation', { state: { order: res.data } });
-    } else setError(res.message || 'Failed to place order');
+    } else setError(res.message || 'Failed to place order. Please try again.');
   };
 
   if (!items.length) { navigate('/cart'); return null; }
@@ -274,7 +343,11 @@ export function CheckoutPage() {
       </div>
 
       <div style={{ padding: '0 16px', paddingBottom: 120 }}>
-        {error && <div style={{ background: '#FEE2E2', borderRadius: 12, padding: '12px 16px', color: '#DC2626', margin: '16px 0', fontWeight: 600 }}>{error}</div>}
+        {error && (
+          <div style={{ background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 12, padding: '12px 16px', color: '#DC2626', margin: '16px 0', fontSize: 14, lineHeight: 1.5 }}>
+            {error}
+          </div>
+        )}
 
         {/* Delivery Mode */}
         <h3 style={{ fontFamily: 'Sora,sans-serif', fontWeight: 800, marginTop: 20, marginBottom: 12, color: colors.text }}>Delivery Mode</h3>
@@ -282,7 +355,7 @@ export function CheckoutPage() {
           {(['home', 'pickup'] as const).map(mode => (
             <button key={mode} onClick={() => setDeliveryMode(mode)} style={{ padding: '16px', border: `2px solid ${deliveryMode === mode ? colors.brand : colors.border}`, borderRadius: 14, background: deliveryMode === mode ? colors.brandLight : colors.card, cursor: 'pointer', textAlign: 'center' }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>{mode === 'home' ? '🚚' : '🏪'}</div>
-              <div style={{ fontWeight: 700, color: deliveryMode === mode ? colors.brand : colors.text, fontSize: 14, textTransform: 'capitalize' }}>{mode === 'home' ? 'Home Delivery' : 'Pickup'}</div>
+              <div style={{ fontWeight: 700, color: deliveryMode === mode ? colors.brand : colors.text, fontSize: 14 }}>{mode === 'home' ? 'Home Delivery' : 'Pickup'}</div>
             </button>
           ))}
         </div>
@@ -310,8 +383,26 @@ export function CheckoutPage() {
 
         {/* Payment */}
         <h3 style={{ fontFamily: 'Sora,sans-serif', fontWeight: 800, marginTop: 24, marginBottom: 12, color: colors.text }}>Payment Method</h3>
-        <div style={{ border: `2px solid ${colors.brand}`, borderRadius: 14, padding: '14px', background: colors.brandLight }}>
-          <span style={{ fontWeight: 700, color: colors.brand }}>💵 Cash on Delivery</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button onClick={() => setPayMethod('cash_on_delivery')} style={{ padding: '14px 16px', border: `2px solid ${payMethod === 'cash_on_delivery' ? colors.brand : colors.border}`, borderRadius: 14, background: payMethod === 'cash_on_delivery' ? colors.brandLight : colors.card, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 22 }}>💵</span>
+            <div>
+              <div style={{ fontWeight: 700, color: payMethod === 'cash_on_delivery' ? colors.brand : colors.text, fontSize: 14 }}>Cash on Delivery</div>
+              <div style={{ color: colors.sub, fontSize: 12, marginTop: 2 }}>Pay when your order arrives</div>
+            </div>
+            {payMethod === 'cash_on_delivery' && <svg style={{ marginLeft: 'auto' }} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.brand} strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>}
+          </button>
+
+          {PAYSTACK_KEY && (
+            <button onClick={() => setPayMethod('paystack')} style={{ padding: '14px 16px', border: `2px solid ${payMethod === 'paystack' ? colors.brand : colors.border}`, borderRadius: 14, background: payMethod === 'paystack' ? colors.brandLight : colors.card, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 22 }}>💳</span>
+              <div>
+                <div style={{ fontWeight: 700, color: payMethod === 'paystack' ? colors.brand : colors.text, fontSize: 14 }}>Pay with Card</div>
+                <div style={{ color: colors.sub, fontSize: 12, marginTop: 2 }}>Debit/credit card via Paystack</div>
+              </div>
+              {payMethod === 'paystack' && <svg style={{ marginLeft: 'auto' }} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.brand} strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>}
+            </button>
+          )}
         </div>
 
         {/* Summary */}
@@ -335,8 +426,15 @@ export function CheckoutPage() {
       </div>
 
       <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, padding: 16, background: colors.card, borderTop: `1px solid ${colors.border}` }}>
-        <button className="btn btn-primary btn-full" onClick={placeOrder} disabled={loading || (deliveryMode === 'home' && !selectedAddr)}>
-          {loading ? 'Placing Order...' : `Place Order • ${money(grandTotal)}`}
+        <button
+          className="btn btn-primary btn-full"
+          onClick={placeOrder}
+          disabled={loading || (deliveryMode === 'home' && !selectedAddr)}
+        >
+          {loading
+            ? (payMethod === 'paystack' ? 'Opening Payment...' : 'Placing Order...')
+            : `${payMethod === 'paystack' ? 'Pay' : 'Place Order'} • ${money(grandTotal)}`
+          }
         </button>
       </div>
     </div>
@@ -347,15 +445,54 @@ export function CheckoutPage() {
 export function OrderConfirmationPage() {
   const { colors } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
+  const raw = location.state?.order;
+  const order = raw?.data || raw || {};
+  const orderNum = order.order_number || order.id?.slice?.(0, 8)?.toUpperCase() || null;
 
   return (
-    <div className="screen-content no-tab" style={{ background: colors.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 24px', gap: 20 }}>
-      <div style={{ width: 96, height: 96, borderRadius: '50%', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="screen-content no-tab" style={{ background: colors.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 24px', gap: 0 }}>
+      <div style={{ width: 96, height: 96, borderRadius: '50%', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>
       </div>
-      <h2 style={{ fontFamily: 'Sora,sans-serif', fontWeight: 900, fontSize: 24, color: colors.text, textAlign: 'center' }}>Order Placed! 🎉</h2>
-      <p style={{ color: colors.sub, textAlign: 'center', lineHeight: 1.7, fontSize: 15 }}>Your order has been successfully placed. We'll notify you when it's on its way!</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', marginTop: 12 }}>
+
+      <h2 style={{ fontFamily: 'Sora,sans-serif', fontWeight: 900, fontSize: 24, color: colors.text, textAlign: 'center', marginBottom: 8 }}>Order Placed! 🎉</h2>
+      <p style={{ color: colors.sub, textAlign: 'center', lineHeight: 1.7, fontSize: 15, marginBottom: 24 }}>
+        Your order has been successfully placed. We'll notify you when it's on its way!
+      </p>
+
+      {orderNum && (
+        <div style={{ background: colors.muted, borderRadius: 14, padding: '14px 20px', marginBottom: 20, textAlign: 'center', width: '100%' }}>
+          <div style={{ color: colors.sub, fontSize: 12, fontWeight: 600, marginBottom: 4 }}>ORDER NUMBER</div>
+          <div style={{ fontFamily: 'Sora,sans-serif', fontWeight: 900, fontSize: 22, color: colors.text, letterSpacing: 1 }}>#{orderNum}</div>
+          <div style={{ color: colors.sub, fontSize: 12, marginTop: 4 }}>Save this for reference</div>
+        </div>
+      )}
+
+      {order.total_amount > 0 && (
+        <div style={{ background: colors.card, borderRadius: 14, border: `1px solid ${colors.border}`, padding: '14px 16px', width: '100%', marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ color: colors.sub, fontSize: 14 }}>Total Paid</span>
+            <span style={{ fontFamily: 'Sora,sans-serif', fontWeight: 900, fontSize: 16, color: colors.brand }}>{money(order.total_amount)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: colors.sub, fontSize: 14 }}>Payment</span>
+            <span style={{ fontWeight: 700, color: colors.text, fontSize: 14, textTransform: 'capitalize' }}>
+              {order.payment_method === 'cash_on_delivery' ? 'Cash on Delivery' : order.payment_method || 'N/A'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div style={{ background: colors.brandLight, borderRadius: 14, padding: '14px 16px', width: '100%', marginBottom: 24, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <span style={{ fontSize: 20 }}>📦</span>
+        <div>
+          <div style={{ fontWeight: 700, color: colors.brand, fontSize: 14, marginBottom: 2 }}>What happens next?</div>
+          <div style={{ color: colors.sub, fontSize: 13, lineHeight: 1.6 }}>Our team will confirm your order shortly. You'll receive updates as your order is prepared and dispatched.</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
         <button className="btn btn-primary btn-full" onClick={() => navigate('/orders')}>Track My Order</button>
         <button className="btn btn-ghost btn-full" onClick={() => navigate('/')}>Continue Shopping</button>
       </div>
@@ -368,7 +505,6 @@ export function OrdersPage() {
   const { colors } = useTheme();
   const { orders, loading, fetchOrders } = useOrdersStore();
   const navigate = useNavigate();
-  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => { fetchOrders(); }, []);
 
@@ -388,6 +524,7 @@ export function OrdersPage() {
       <div className="screen-content page-enter" style={{ background: colors.bg }}>
         <div className="header" style={{ background: colors.card, borderColor: colors.border }}>
           <span className="header-title" style={{ color: colors.text }}>My Orders</span>
+          <button onClick={() => fetchOrders()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.brand, fontWeight: 700, fontSize: 13 }}>Refresh</button>
         </div>
 
         {loading ? (
@@ -410,15 +547,15 @@ export function OrdersPage() {
               <div key={order.id} className="order-card" style={{ background: colors.card, borderColor: colors.border }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
-                    <div style={{ fontFamily: 'Sora,sans-serif', fontWeight: 800, fontSize: 15, color: colors.text }}>#{order.order_number || order.id?.slice(0, 8)}</div>
-                    <div style={{ color: colors.sub, fontSize: 13, marginTop: 3 }}>{formatDate(order.created_at || order.createdAt)}</div>
+                    <div style={{ fontFamily: 'Sora,sans-serif', fontWeight: 800, fontSize: 15, color: colors.text }}>#{order.order_number || order.id?.slice(0, 8)?.toUpperCase()}</div>
+                    <div style={{ color: colors.sub, fontSize: 13, marginTop: 3 }}>{formatDate(order.created_at || (order as any).createdAt)}</div>
                   </div>
                   <span className={statusClass(order.status)} style={{ fontSize: 11 }}>{order.status?.replace(/_/g, ' ')}</span>
                 </div>
                 <div className="divider" style={{ background: colors.border, margin: '12px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: colors.sub, fontSize: 13 }}>{Array.isArray(order.items) ? order.items.length : 0} item{Array.isArray(order.items) && order.items.length !== 1 ? 's' : ''}</span>
-                  <span style={{ fontFamily: 'Sora,sans-serif', fontWeight: 900, fontSize: 16, color: colors.brand }}>{money(order.total_amount || order.totalAmountNaira || 0)}</span>
+                  <span style={{ fontFamily: 'Sora,sans-serif', fontWeight: 900, fontSize: 16, color: colors.brand }}>{money(order.total_amount || (order as any).totalAmountNaira || 0)}</span>
                 </div>
                 <div style={{ marginTop: 12 }}>
                   <button onClick={() => navigate('/support')} style={{ background: 'none', border: `1.5px solid ${colors.border}`, borderRadius: 10, padding: '8px 16px', cursor: 'pointer', color: colors.text, fontWeight: 700, fontSize: 13 }}>Get Support</button>

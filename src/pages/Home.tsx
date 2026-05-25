@@ -13,12 +13,13 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
   const navigate = useNavigate();
   const isOut = !product.inStock || (product.stockCount || 0) === 0;
   const isLow = !isOut && (product.stockCount || 0) <= 5;
+  const [imgErr, setImgErr] = useState(false);
 
   return (
     <div className="product-card" onClick={() => navigate(`/products/${product.id}`)}>
       <div className="product-thumb">
-        {product.image ? (
-          <img src={product.image} alt={product.name} loading="lazy" />
+        {product.image && !imgErr ? (
+          <img src={product.image} alt={product.name} loading="lazy" onError={() => setImgErr(true)} />
         ) : (
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.5"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
         )}
@@ -114,6 +115,7 @@ export default function HomePage() {
             placeholder="Search products..."
             value={q}
             onChange={e => setQ(e.target.value)}
+            maxLength={100}
             style={{ color: colors.text }}
           />
           {q && <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.sub }}>✕</button>}

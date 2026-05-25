@@ -114,7 +114,7 @@ class ApiService {
               return this.api(orig);
             }
           } catch {
-            this.clearTokens();
+            this.clearTokens(true);
           }
         }
         return Promise.reject(error);
@@ -122,10 +122,11 @@ class ApiService {
     );
   }
 
-  private clearTokens() {
+  private clearTokens(expired = false) {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('userData');
+    if (expired) window.dispatchEvent(new CustomEvent('auth:expired'));
   }
 
   async login(identifier: string, password: string): Promise<ApiResponse<{ token: string; refreshToken: string; user: User }>> {

@@ -98,6 +98,8 @@ export function EditProfilePage() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault(); setError(''); setMsg('');
+    if (!form.firstName.trim()) { setError('First name is required'); return; }
+    if (!form.lastName.trim()) { setError('Last name is required'); return; }
     setLoading(true);
     const res = await apiService.updateCustomerProfile(form);
     setLoading(false);
@@ -148,13 +150,24 @@ export function AddressesPage() {
   const load = () => { setLoading(true); apiService.getCustomerAddresses().then(res => { if (res.success) setAddresses(res.data || []); setLoading(false); }); };
   useEffect(load, []);
 
+  const [formError, setFormError] = useState('');
+
   const save = async (e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true);
+    e.preventDefault(); setFormError('');
+    if (!form.label.trim()) { setFormError('Label is required (e.g. Home, Office)'); return; }
+    if (!form.street.trim()) { setFormError('Street address is required'); return; }
+    if (!form.city.trim()) { setFormError('City is required'); return; }
+    if (!form.state.trim()) { setFormError('State is required'); return; }
+    setSaving(true);
     await apiService.createCustomerAddress(form);
     setSaving(false); setShowForm(false); load();
   };
 
-  const del = async (id: string) => { await apiService.deleteCustomerAddress(id); load(); };
+  const del = async (id: string) => {
+    if (!window.confirm('Delete this address? This cannot be undone.')) return;
+    await apiService.deleteCustomerAddress(id);
+    load();
+  };
 
   const inputStyle = { background: colors.muted, borderColor: colors.border, color: colors.text };
 
@@ -169,6 +182,7 @@ export function AddressesPage() {
       {showForm && (
         <form onSubmit={save} style={{ padding: '16px', background: colors.card, margin: '12px 16px', borderRadius: 16, border: `1px solid ${colors.border}` }}>
           <h3 style={{ fontFamily: 'Sora,sans-serif', fontWeight: 800, color: colors.text, marginBottom: 14 }}>New Address</h3>
+          {formError && <div style={{ background: '#FEE2E2', borderRadius: 10, padding: '10px 14px', color: '#DC2626', marginBottom: 12, fontSize: 13 }}>{formError}</div>}
           <label className="form-label" style={{ color: colors.text, marginTop: 0 }}>Label (e.g. Home)</label>
           <input className="input" placeholder="Home" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} style={inputStyle} />
           <label className="form-label" style={{ color: colors.text }}>Street</label>
