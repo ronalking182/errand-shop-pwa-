@@ -195,8 +195,15 @@ class ApiService {
   }
 
   async resetPassword(email: string, code: string, newPassword: string): Promise<ApiResponse> {
-    try { const res = await this.api.post('/auth/reset-password', { email, code, new_password: newPassword }); return res.data; }
-    catch (e: any) { return { success: false, message: e.response?.data?.message || 'Reset failed' }; }
+    try { const res = await this.api.post('/auth/reset-password', { email, otp: code, newPassword }); return res.data; }
+    catch (e: any) {
+      const data = e.response?.data;
+      let msg = data?.message || 'Reset failed';
+      if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        msg = data.errors.map((err: any) => err.message || err.msg || String(err)).join(' • ');
+      }
+      return { success: false, message: msg };
+    }
   }
 
   async logout(): Promise<void> {
