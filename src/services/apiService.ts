@@ -154,7 +154,33 @@ class ApiService {
       });
       return res.data;
     } catch (e: any) {
-      return { success: false, message: e.response?.data?.message || 'Registration failed' };
+      if (!e.response) {
+        if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) {
+          return { success: false, message: 'Connection timed out. The server may be starting up — please wait a moment and try again.' };
+        }
+        return { success: false, message: 'Cannot reach the server. Please check your internet connection and try again.' };
+      }
+      const status: number = e.response.status;
+      const data = e.response.data;
+      let backendMessage: string = data?.message || data?.error || data?.detail || '';
+      if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        backendMessage = data.errors.map((err: any) => err.message || err.msg || String(err)).join(' • ');
+      } else if (data?.errors && typeof data.errors === 'object') {
+        backendMessage = Object.values(data.errors).flat().join(' • ');
+      }
+      if (status === 409) {
+        return { success: false, message: backendMessage || 'An account with this email or phone number already exists. Please log in instead.' };
+      }
+      if (status === 400 || status === 422) {
+        return { success: false, message: backendMessage || 'Some of your details are invalid. Please check the form and try again.' };
+      }
+      if (status === 429) {
+        return { success: false, message: 'Too many attempts. Please wait a few minutes and try again.' };
+      }
+      if (status >= 500) {
+        return { success: false, message: `Server error (${status}): Our servers are having trouble right now. Please try again in a moment.` };
+      }
+      return { success: false, message: backendMessage || `Registration failed (error ${status}). Please try again.` };
     }
   }
 
