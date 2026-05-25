@@ -41,7 +41,21 @@ export function SignupPage() {
       <PwaInstallPrompt spacing="0 16px" />
 
       <form onSubmit={onSubmit} style={{ padding: '0 16px' }}>
-        {err && <div style={{ background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 16, color: '#DC2626', fontSize: 14 }}>{err}</div>}
+        {err && (
+          <div style={{ background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 10, padding: '12px 14px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <div>
+              <div style={{ color: '#DC2626', fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Registration Failed</div>
+              <div style={{ color: '#B91C1C', fontSize: 13, lineHeight: 1.5 }}>{err}</div>
+              {(err.toLowerCase().includes('server') || err.toLowerCase().includes('timeout') || err.toLowerCase().includes('connect')) && (
+                <div style={{ color: '#991B1B', fontSize: 12, marginTop: 6, fontStyle: 'italic' }}>This is a server-side issue, not a problem with your details. Please try again shortly.</div>
+              )}
+              {err.toLowerCase().includes('already exists') && (
+                <div style={{ color: '#991B1B', fontSize: 12, marginTop: 6 }}>Already have an account? <button type="button" onClick={() => navigate('/login')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontWeight: 700, fontSize: 12, padding: 0, textDecoration: 'underline' }}>Log in here</button></div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
