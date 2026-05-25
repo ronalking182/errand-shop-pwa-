@@ -45,15 +45,19 @@ function fallbackInstallHint(): string {
   return '⋮ menu → Install, or tap ⊕ in the address bar.';
 }
 
+type PwaInstallPromptProps = {
+  spacing?: string;
+  /** Allow user to dismiss the banner (persisted in localStorage). */
+  dismissable?: boolean;
+  /** Space below banner before content (login card, etc.) */
+  gapAfter?: number;
+};
+
 export function PwaInstallPrompt({
   spacing = '0 16px',
   dismissable = true,
   gapAfter = 22,
-}: {
-  spacing?: string;
-  /** Space below banner before content (login card, etc.) */
-  gapAfter?: number;
-}) {
+}: PwaInstallPromptProps) {
   const { colors, appearance } = useTheme();
   const [standalone] = useState(readStandalone);
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
